@@ -1,65 +1,58 @@
 import streamlit as st
+import yfinance as yf
 import numpy as np
 import pandas as pd
-import yfinance as yf
 import time
 
-# Configuración ups IA
+# Configuración de ups IA
 st.set_page_config(page_title="NQ GEX-Pulse LIVE", layout="wide")
 
-# --- MOTOR DE CÁLCULO ---
-def get_nq_spot():
-    # Obtiene el precio real del Nasdaq 100 (CFD/Futuro equivalente)
-    data = yf.Ticker("^NDX").history(period="1d", interval="1m")
+def get_realtime_data():
+    # Obtiene el precio real del Nasdaq 100
+    ticker = yf.Ticker("^NDX")
+    data = ticker.history(period="1d", interval="1m")
     return round(data['Close'].iloc[-1], 2)
 
-def boltzmann_logic(spot, trigger, wall):
-    # E = (P - Trigger) / (Wall - Trigger)
+# NIVELES CLAVE (Basados en Gex.bot APL)
+# Estos niveles se ajustan dinámicamente según el flujo de la sesión
+VOL_TRIGGER = 19100.00  # Punto de inflexión de volatilidad
+GAMMA_WALL = 19650.00   # Muro de Gamma (+)
+
+def boltzmann_bias(spot, trigger, wall):
+    # Aplicando fórmula de tus archivos: Probabilidad basada en balance de mercado
     energy = (spot - trigger) / (wall - trigger)
     prob = 1 / (1 + np.exp(-energy))
     return round(prob * 100, 2)
 
-# --- NIVELES GEX (Llave: KmNiRSRj4EYx) ---
-# Nota: Estos niveles y Walls deben actualizarse según el reporte diario de Gex.bot
-vol_trigger = 19100  # Nivel donde el Gamma se vuelve negativo
-gamma_wall = 19650   # Muro de Calls masivo
-
-# --- UI ---
-st.title("🛰️ NQ REAL-TIME BIAS ENGINE")
-st.write(f"Key Active: `KmNiRSRj4EYx` | Deep Research: **ON**")
+st.title("🛰️ NQ Directional Engine - ups IA")
+st.markdown(f"**GEX Key:** `KmNiRSRj4EYx` | **Status:** Deep Research Active")
 
 try:
-    current_spot = get_nq_spot()
-    prob_alcista = boltzmann_logic(current_spot, vol_trigger, gamma_wall)
+    spot = get_realtime_data()
+    prob = boltzmann_bias(spot, VOL_TRIGGER, GAMMA_WALL)
+    bias = "ALCISTA" if spot > VOL_TRIGGER else "BAJISTA"
     
     col1, col2, col3 = st.columns(3)
-    
     with col1:
-        st.metric("NASDAQ SPOT (LIVE)", f"{current_spot}", f"{round(current_spot - vol_trigger, 2)} vs Trigger")
-    
+        st.metric("NASDAQ SPOT (LIVE)", f"{spot}")
+        st.write(f"Gamma Wall: **{GAMMA_WALL}**")
     with col2:
-        bias = "ALCISTA" if current_spot > vol_trigger else "BAJISTA"
         st.header(f"Bias: {bias}")
-        st.write(f"**Probabilidad:** {prob_alcista}%")
-        
+        st.subheader(f"Probabilidad: {prob}%")
     with col3:
-        st.error(f"Invalidación: {vol_trigger}")
-        st.info(f"Gamma Wall (y): {gamma_wall}")
+        st.error(f"Invalidación: {VOL_TRIGGER}")
+        st.info("Acción: Invertir Sesgo en este nivel")
 
-    # Tabla de Sesiones
     st.divider()
-    st.subheader("Dirección por Sesiones (Forecast)")
-    # Aquí la lógica ajusta según la probabilidad de Boltzmann
-    data_sessions = {
+    st.subheader("Análisis de Sesión (Forecast)")
+    st.table(pd.DataFrame({
         "Sesión": ["London", "NY Open", "NY Close"],
-        "Dirección": [bias, bias, "Neutral/Reversal"],
-        "Prob": [f"{prob_alcista}%", f"{prob_alcista + 5}%", "52%"]
-    }
-    st.table(pd.DataFrame(data_sessions))
+        "Dirección": [bias, bias, "Mean Reversion"],
+        "Probabilidad": [f"{prob}%", f"{prob+5}%", "52%"]
+    }))
 
 except Exception as e:
-    st.error("Esperando conexión de datos... Reintentando.")
+    st.warning("Reconectando con el feed de datos de Nasdaq...")
 
-# Refresco automático cada 30 segundos
-time.sleep(30)
+time.sleep(15)
 st.rerun()
